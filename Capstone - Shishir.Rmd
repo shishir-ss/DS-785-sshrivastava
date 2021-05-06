@@ -1,0 +1,675 @@
+---
+title: "Capstone - Shishir"
+author: "Shishir Shrivastava"
+date: "3/4/2021"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## R Markdown
+
+This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
+
+When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
+
+## Declare libraries
+```{r}
+rm(list=ls())
+library(data.table)
+library(DT)
+library(timeSeries)
+library(tidyverse)
+library(reshape)
+library(stringr)
+library(doBy)
+library(formattable)
+library(gridExtra)
+library(ggplot2)
+library(plotly)
+library(corrplot)
+library(wesanderson)
+library(RColorBrewer)
+library(zoo)
+library(forecast)
+library(prophet)
+library(nnfor)
+library(dplyr)
+library(tidyr)
+library(tseries)
+library(TSA)
+library(tibble)
+library(TTR)
+library(xts)
+library(dygraphs)
+library(assertthat)
+library(lubridate)
+library(reshape)
+
+```
+
+
+## Read raw dataset
+```{r}
+forecast_raw <- read.csv("C:\\Users\\shish\\Google Drive\\MS-DS\\Wisconsin\\DS785 - Capstone\\Project\\ppg_mfg_data.csv")
+
+
+```
+
+
+## Rename columns in standard format
+```{r}
+colnames(forecast_raw)<- 
+  c(
+    "ID",
+    "Project.Code",
+    "PQ",
+    "PO.SO",
+    "ASN.DN",
+    "Country",
+    "Managed.By",
+    "Fulfill.Via",
+    "Vendor.INCO.Term",
+    "Shipment.Mode",
+    "PQ.First.Sent.Date",
+    "PO.Sent.to.Vendor.Date",
+    "Scheduled.Delivery.Date",
+    "Delivered.to.Client.Date",
+    "Delivery.Recorded.Date",
+    "Product.Group",
+    "Sub.Classification",
+    "Vendor",
+    "Item.Description",
+    "Molecule.Test.Type",
+    "Brand",
+    "Dosage",
+    "Dosage.Form",
+    "Unit.of.Measure",
+    "Line.Item.Quantity",
+    "Line.Item.Value",
+    "Pack.Price",
+    "Unit.Price",
+    "Manufacturing.Site",
+    "First.Line.Designation",
+    "Weight.Kilograms",
+    "Freight.Cost.USD",
+    "Line.Item.Insurance.USD"
+  )
+```
+
+
+## summarized Structure of data
+```{r}
+str(forecast_raw)
+```
+
+## Data quality : Data Cleansing
+## Removing records with missing values and outliers
+```{r}
+forecast_data <- na.omit(forecast_raw)
+forecast_data <- filter(forecast_data, Unit.Price != 0)
+```
+
+## Analyzing fields based on forecasting relevance of dataset
+```{r}
+options(repr.plot.width=12, repr.plot.height=12) 
+forecast_data$Managed.By <- as.factor(forecast_data$Managed.By)
+forecast_data$Fulfill.Via <- as.factor(forecast_data$Fulfill.Via)
+forecast_data$Vendor.INCO.Term <- as.factor(forecast_data$Vendor.INCO.Term)
+forecast_data$Shipment.Mode <- as.factor(forecast_data$Shipment.Mode)
+forecast_data$Product.Group <- as.factor(forecast_data$Product.Group)
+forecast_data$Sub.Classification <- as.factor(forecast_data$Sub.Classification)
+
+
+p1 = ggplot(forecast_data, aes(x=Managed.By)) + geom_bar(fill = "orange", alpha = 0.3)
+p2 = ggplot(forecast_data, aes(x=Vendor.INCO.Term)) + geom_bar(fill = "green", alpha = 0.3)
+p3 = ggplot(forecast_data, aes(x=Shipment.Mode)) + geom_bar(fill = "red", alpha = 0.3)
+p4 = ggplot(forecast_data, aes(x=Sub.Classification)) + geom_bar(fill = "blue", alpha = 0.3)
+
+grid.arrange(p1,p2,p3,p4, nrow=2,ncol=2)
+```
+
+
+## Analyzing fields based on forecasting relevance of dataset
+```{r}
+options(repr.plot.width=12, repr.plot.height=12) 
+p5 = ggplot(forecast_data, aes(x=Fulfill.Via)) + geom_bar(fill = "green", alpha = 0.3)
+p6 = ggplot(forecast_data, aes(x=Product.Group)) + geom_bar(fill = "red", alpha = 0.3)
+grid.arrange(p5,p6, nrow=1,ncol=2)
+
+```
+
+
+
+```{r}
+options(repr.plot.width=12, repr.plot.height=12) 
+forecast_data$Brand <- as.factor(forecast_data$Brand)
+forecast_data$Project.Code <- as.factor(forecast_data$Project.Code)
+
+
+p1 = ggplot(forecast_data, aes(x=Brand)) + geom_bar(fill = "orange", alpha = 0.3)
+p2 = ggplot(forecast_data, aes(x=Project.Code)) + geom_bar(fill = "green", alpha = 0.3)
+
+grid.arrange(p1,p2, nrow=2,ncol=1)
+
+```
+
+
+## Converting character format Scheduled.Delivery.Date field to Date datatype
+```{r}
+forecast_data$Scheduled.Delivery.Date <- dmy(forecast_data$Scheduled.Delivery.Date)
+```
+
+
+## Data Analysis
+```{r}
+options(repr.plot.width=12, repr.plot.height=12) 
+
+p1 = ggplot(forecast_data, aes(Line.Item.Quantity)) + geom_histogram(bins = 50, aes(y = ..density..), col = "red", fill = "red", alpha = 0.3) + geom_density()# + xlim(c(0, 1000))
+
+p2 = ggplot(forecast_data, aes(Line.Item.Value)) + geom_histogram(bins = 50, aes(y = ..density..), col = "red", fill = "red", alpha = 0.3) + geom_density()# + xlim(c(0, 1000))
+
+p3 = ggplot(forecast_data, aes(Pack.Price)) + geom_histogram(bins = 50, aes(y = ..density..), col = "red", fill = "red", alpha = 0.3) + geom_density()# + xlim(c(0, 1000))
+
+p4 = ggplot(forecast_data, aes(Unit.Price)) + geom_histogram(bins = 50, aes(y = ..density..), col = "red", fill = "red", alpha = 0.3) + geom_density()# + xlim(c(0, 1000))
+
+grid.arrange(p1,p2,p3,p4, nrow=2,ncol=2)
+```
+
+## Analyzing Line.Item.Quantity distribution
+```{r}
+summary(forecast_data$Line.Item.Quantity)
+boxplot(forecast_data$Line.Item.Quantity)
+```
+
+
+
+
+## Removing the outliers, preparing dataset for time-series analysis
+```{r}
+ts_data <-  forecast_data[c("Scheduled.Delivery.Date", "Line.Item.Quantity")]
+ts_data_filter <- filter(ts_data, Line.Item.Quantity != 0)
+ts_data_filter <- filter(ts_data_filter, year(ts_data_filter$Scheduled.Delivery.Date) > 2010)
+ts_data_filter <- filter(ts_data_filter, year(ts_data_filter$Scheduled.Delivery.Date) < 2014)
+ts_data_filter <- filter(ts_data_filter, ts_data_filter$Line.Item.Quantity < 50000)
+ts_data_filter <- filter(ts_data_filter, ts_data_filter$Line.Item.Quantity > 1000)
+```
+
+
+## Capture year an month for better analysis and plotting
+```{r}
+ts_data_filter$year=year(ts_data_filter$Scheduled.Delivery.Date)  #capture year
+ts_data_filter$month=as.yearmon(ts_data_filter$Scheduled.Delivery.Date) #capture month 
+```
+
+
+## Aggregating demand data along with Time units 
+```{r}
+arima_date <- aggregate(Line.Item.Quantity ~Scheduled.Delivery.Date, ts_data_filter, mean, drop = TRUE)
+summary(arima_date)
+```
+
+
+
+## Plotting time-series analysis graph
+```{r}
+data = ts(arima_date[,2],start = c(2011,1),frequency = 220)
+plot(data, xlab='Years', ylab = 'Sales Demand')
+
+```
+
+## Aggregating data at month level
+```{r}
+arima_month <- aggregate(Line.Item.Quantity ~month, ts_data_filter, mean, drop = TRUE)
+
+data = ts(arima_month[,2],start = c(2011,1),frequency = 12)
+plot(data, xlab='Years', ylab = 'Sales Demand')
+```
+
+
+## Differentiate data to get the time snapshot
+```{r}
+plot(diff(data),ylab='Differenced Sales Demand')
+
+```
+
+## Log transform data to make it sationary on variances
+```{r}
+plot(log10(data),ylab='Log (Sales)')
+```
+
+## Differentiate log transform data to get the time snapshot through mean and variance
+```{r}
+plot(diff(log10(data)),ylab='Differenced Log (Sales)')
+```
+
+## Plot Auto-correlation factor (ACF) and Partial Auto-correlation factor (PACF)
+```{r}
+par(mfrow = c(1,2))
+acf(ts(diff(log10(data))),main='ACF Sales/Demand')
+pacf(ts(diff(log10(data))),main='PACF Sales/Demand')
+```
+
+## Identifying best ARIMA Model
+```{r}
+ARIMAModel = auto.arima(log10(data), approximation=FALSE,trace=FALSE)
+summary(ARIMAModel)
+```
+## ARIMA model doesn't suits or supports the univariate model like ARIMA
+
+
+
+## Analyzing Prophet Model
+```{r}
+forecast_data$year=year(forecast_data$Scheduled.Delivery.Date) #Capture Month
+forecast_data$month=as.yearmon(forecast_data$Scheduled.Delivery.Date) #Capture year
+head(forecast_data)
+
+```
+
+
+#Split Test and Train data
+```{r}
+smp_size <- floor(0.80 * nrow(forecast_data))
+train_ind <- sample(seq_len(nrow(forecast_data)), size = smp_size)
+
+train <- forecast_data[train_ind, ]
+test <- forecast_data[-train_ind, ]
+
+head(train)
+head(test)
+```
+
+## Analyzing data distribution of Line.Item.Quantity
+```{r}
+gbp1<-wes_palette("GrandBudapest2")[1]
+
+ggplot(train, aes(x=Line.Item.Quantity))+
+  geom_histogram(fill="skyblue", alpha=0.5)+
+  labs(x="Sale Price", y="Demand Qty", title = "Demand Qty")+
+  theme_minimal() + 
+  theme(plot.title=element_text(vjust=1, size=15) )
+```
+
+
+## Datewise demand distribution
+```{r}
+Proph_Mean <- aggregate(Line.Item.Quantity ~Scheduled.Delivery.Date, train, mean)
+
+sl1 <-
+  ggplot(Proph_Mean, aes(x=Scheduled.Delivery.Date, y=Line.Item.Quantity))+
+  geom_line()+
+  geom_point()+
+  geom_point(colour="skyblue", size = 3, alpha=1.5)+
+  labs(title="The Growth of demand by through years", x=NULL, y="Sale Price")+
+  theme( plot.title=element_text(vjust=3, size=15) ) + 
+  theme_minimal()
+
+Proph_Mean$rate = c(0, 100*diff(Proph_Mean$Line.Item.Quantity)/Proph_Mean[-nrow(Proph_Mean),]$Line.Item.Quantity)
+
+sl2 <-ggplot(Proph_Mean, aes(x=as.factor(Scheduled.Delivery.Date), y=rate))+
+  geom_line(color= "skyblue", aes(group=1), size=1)+
+  labs(title="Change rate of Sale Price", x="Scheduled.Delivery.Date", y="rate of change")+
+  geom_hline(yintercept = 0, color = gbp1 )+
+  theme(plot.title=element_text(size=15))+ theme_minimal()
+
+grid.arrange(sl1,sl2)
+```
+
+## Monthwise demand distribution
+```{r}
+proph_month <- aggregate(Line.Item.Quantity ~month, train, mean)
+
+sl1 <-ggplot(proph_month, aes(x=as.factor(month), y=Line.Item.Quantity))+
+  geom_line(color="skyblue", aes(group=1), size=1.5)+
+  geom_point(colour="skyblue", size = 3.5, alpha=0.5)+
+  labs(title="Monthwise Demand distribution", x=NULL, y="Sale Price")+
+  theme( plot.title=element_text(vjust=3, size=15) ) + theme_minimal()
+
+proph_month$rate = c(0, 100*diff(proph_month$Line.Item.Quantity)/proph_month[-nrow(proph_month),]$Line.Item.Quantity)
+
+sl2 <-ggplot(proph_month, aes(x=as.factor(month), y=rate))+
+  geom_line(color= "navyblue", aes(group=1), size=1)+
+  #geom_point(colour=gbp1, size = 3.5, alpha=0.5)+
+  labs(title="Demand value Change", x="Month", y="rate of change")+
+  geom_hline(yintercept = 0, color = gbp1 )+
+  theme(plot.title=element_text(size=15))+ theme_minimal()
+
+grid.arrange(sl1,sl2)
+```
+
+## Yearwise demand distribution
+```{r}
+proph_year <- aggregate(Line.Item.Quantity ~year, train, mean)
+# MSP <-na.omit(ddply(data, 'date', summarise, mean(Sale_Prices, na.rm=T)))
+
+sl1 <-ggplot(proph_year, aes(x=as.factor(year), y=Line.Item.Quantity))+
+  geom_line(color="skyblue", aes(group=1), size=1.5)+
+  geom_point(colour="skyblue", size = 3.5, alpha=0.5)+
+  labs(title="Yearwise Demand distribution", x=NULL, y="Sale Price")+
+  theme( plot.title=element_text(vjust=3, size=15) ) + theme_minimal()
+
+proph_year$rate = c(0, 100*diff(proph_year$Line.Item.Quantity)/proph_year[-nrow(proph_year),]$Line.Item.Quantity)
+
+sl2 <-ggplot(proph_year, aes(x=as.factor(year), y=rate))+
+  geom_line(color= "navyblue", aes(group=1), size=1)+
+  #geom_point(colour=gbp1, size = 3.5, alpha=0.5)+
+  labs(title="Demand Rates", x="Year", y="rate of change")+
+  geom_hline(yintercept = 0, color = gbp1 )+
+  theme(plot.title=element_text(size=15))+ theme_minimal()
+
+grid.arrange(sl1,sl2)
+
+```
+
+
+## Brandwise demand distribution over the years
+```{r}
+#unique(train$Brand)
+brand_year <-aggregate(Line.Item.Quantity ~Brand+year, train,mean)
+pal<-rep(brewer.pal(10, 'BrBG'),5)
+
+ggplot(brand_year, aes(group = Brand ))+
+  geom_line(aes(x=year,y=Line.Item.Quantity,color=Brand), alpha=0.5, show.legend=F)+
+  labs(title="Brandwise demand over the years", x=NULL
+  )+
+  theme(panel.background=element_rect(fill = "White"),
+        plot.title=element_text(vjust=3, size=15),
+        panel.grid.major=element_line(color = pal))
+```
+
+## Projectwise demand distribution over the years
+```{r}
+project_year <-aggregate(Line.Item.Quantity ~Project.Code+year, train,mean)
+pal<-rep(brewer.pal(10, "BrBG"),5)
+
+ggplot(project_year, aes(group = Project.Code ))+
+  geom_line(aes(x=year,y=Line.Item.Quantity,color=Project.Code), alpha=0.5, show.legend=F)+
+  labs(title="Projectwise Demand over the years", x=NULL
+  )+
+  theme(panel.background=element_rect(fill = "White"),
+        plot.title=element_text(vjust=3, size=15),
+        panel.grid.major=element_line(color = pal))
+```
+
+## Building Prophet Model using sample dataset for 3 months
+```{r}
+brand_project_model = subset(train,train$Brand=="Generic" & train$Project.Code=="116-ZA-T30")
+
+stats=data.frame(y=log1p(brand_project_model$Line.Item.Quantity)
+                 ,ds=brand_project_model$Scheduled.Delivery.Date)
+stats=aggregate(stats$y,by=list(stats$ds),FUN=sum)
+head(stats)
+colnames(stats)<- c("ds","y")
+
+model_prophet = prophet(stats)
+summary(model_prophet)
+future = make_future_dataframe(model_prophet, periods = 90)
+forecast = predict(model_prophet, future)
+```
+
+## Capturing ChangePoints
+```{r}
+model_changepoints <- function(m, threshold = 0.01, cp_color = "black",
+                               cp_linetype = "dashed", trend = TRUE, ...) {
+  layers <- list()
+  if (trend) {
+    trend_layer <- ggplot2::geom_line(
+      ggplot2::aes_string("ds", "trend"), color = cp_color, ...)
+    layers <- append(layers, trend_layer)
+  }
+  signif_changepoints <- m$changepoints[abs(m$params$delta) >= threshold]
+  cp_layer <- ggplot2::geom_vline(
+    xintercept = as.integer(signif_changepoints), color = cp_color,
+    linetype = cp_linetype, ...)
+  layers <- append(layers, cp_layer)
+  return(layers)
+}
+plot(model_prophet, forecast)+ model_changepoints(model_prophet)
+```
+
+
+## Capturing Model components
+```{r}
+prophet_plot_components(model_prophet, forecast)
+```
+
+## Adding seasonality with expected playoffs in July
+```{r}
+game_days <- tibble(
+  holiday = 'game_days',
+  ds = as.Date(c('2013-07-12', 
+                 '2014-07-12', '2014-07-19','2014-07-02', 
+                 '2015-07-11', 
+                 '2016-07-17', '2016-07-24', '2016-07-07','2016-07-24')),
+  lower_window = 0,
+  upper_window = 1
+)
+```
+
+
+## Festive season holidays
+```{r}
+festive_days <- tibble(
+  holiday = 'festive_days',
+  ds = as.Date(c('2009-01-01', '2009-12-25', 
+                 '2010-01-01', '2010-12-25', 
+                 '2011-01-01', '2011-12-25', 
+                 '2012-01-01', '2012-12-25', 
+                 '2013-01-01', '2013-12-25', 
+                 '2014-01-01', '2014-12-25',
+                 '2015-01-01', '2015-12-25',
+                 '2016-01-01', '2016-12-25', 
+                 '2017-01-01', '2017-12-25')),
+  lower_window = 0,
+  upper_window = 1
+)
+holidays <- bind_rows(game_days, festive_days)
+```
+
+
+
+```{r}
+predict_brand_project = data.frame(date=forecast$ds,forecast=expm1(forecast$yhat))
+predict_brand_project$yearmonth=as.yearmon(predict_brand_project$date)
+
+colnames(predict_brand_project)<-c("ds","forecast","yearmonth")
+
+```
+
+
+
+## Adding additional linear regression model
+```{r}
+nfl_sunday <- function(ds) {
+  dates <- as.Date(ds)
+  month <- as.numeric(format(dates, '%m'))
+  as.numeric((weekdays(dates) == "Sunday") & (month > 8 | month < 2))
+}
+stats$nfl_sunday <- nfl_sunday(stats$ds)
+
+
+model_prophet <- prophet()
+model_prophet <- add_regressor(model_prophet, 'nfl_sunday')
+model_prophet <- add_seasonality(model_prophet, name='daily', period=60, fourier.order=5)
+model_prophet <- prophet(stats, holidays = holidays,holidays.prior.scale = 0.5, yearly.seasonality = 4,
+                         interval.width = 0.95,changepoint.prior.scale = 0.006,daily.seasonality = T)
+future = make_future_dataframe(model_prophet, periods = 90, freq = 'days')
+forecast = predict(model_prophet, future)
+```
+
+
+
+
+## Plotting Prophet model 
+```{r}
+plot(model_prophet, forecast) + add_changepoints_to_plot(model_prophet)
+prophet_plot_components(model_prophet, forecast)
+```
+
+
+
+## Creating differential dataset for stationary mean and variance
+```{r}
+predict_brand_project = data.frame(date=forecast$ds,forecast=expm1(forecast$yhat))
+predict_brand_project$yearmonth=as.yearmon(predict_brand_project$date)
+
+colnames(predict_brand_project)<-c("ds","forecast","yearmonth")
+```
+
+
+## Calculating Systematic Mean Absolute Percent Error
+```{r}
+smape_cal <- function(outsample, forecasts){
+  outsample <- as.numeric(outsample)
+  forecasts<-as.numeric(forecasts)
+  smape <- (abs(outsample-forecasts))/((abs(outsample)+abs(forecasts))/2)
+  return(smape)
+}
+
+str(stats)
+stats$ds=as.Date(stats$ds)
+predict_brand_project$ds=as.Date(predict_brand_project$ds)
+
+train_predict=merge(stats,predict_brand_project,by="ds",all.x=T)
+SMAPE_ERR <- smape_cal(outsample=train_predict$y, forecasts=train_predict$forecast)
+SMAPE<-mean(SMAPE_ERR,na.rm = T)
+sprintf("The value of SMAPE for sample Project & sample Brand is %f ", SMAPE )
+```
+
+## plitting data by Project Code and Brand
+```{r}
+train$year=NULL
+train$month=NULL
+head(train)
+
+train_temp <-  train[c("Scheduled.Delivery.Date", "Brand", "Project.Code", "Line.Item.Quantity")]
+colnames(train_temp)<-  c("date","Brand", "project_code", "demand")
+
+train_temp$Line.Item.Quantity = log1p(train_temp$demand)
+
+colnames(train_temp)<- c("ds","Brand","Project.Code","y")
+
+train_splitting= split(data.table(train_temp), by=c("Brand", "Project.Code"), keep.by=FALSE)
+
+class(train_splitting)
+
+prediction<-function(df)
+{
+  playoffs <- data_frame(
+    holiday = 'playoff',
+    ds = as.Date(c('2013-07-12', '2014-07-12', '2014-07-19',
+                   '2014-07-02', '2015-07-11', '2016-07-17',
+                   '2016-07-24', '2016-07-07','2016-07-24')),
+    lower_window = 0,
+    upper_window = 1
+  )
+
+  
+  superbowls <- data_frame(
+    holiday = 'superbowl',
+    ds = as.Date(c('2013-01-01', '2013-12-25', '2014-01-01', '2014-12-25','2015-01-01', '2015-12-25','2016-01-01', '2016-12-25', '2017-01-01', '2017-12-25')),
+    lower_window = 0,
+    upper_window = 1
+  )
+  holidays <- bind_rows(playoffs, superbowls)
+  
+  
+  model_prophet <- prophet()
+  model_prophet <- add_seasonality(model_prophet, name='daily', period=60, fourier.order=5)
+  model_prophet <- prophet(df, holidays = holidays,holidays.prior.scale = 0.5, yearly.seasonality = 4,
+                           interval.width = 0.95,changepoint.prior.scale = 0.006,daily.seasonality = T)
+  
+  
+  future = make_future_dataframe(model_prophet, periods = 90)
+  forecast = predict(model_prophet, future)
+  forecast_final<-  xts::last(forecast[, c("ds","yhat")],90)
+return(forecast_final)
+}  
+```
+
+
+## Data frame for spitted train data
+```{r}
+prediction_final=as.data.frame(sapply(train_splitting[c(1,2)],prediction))
+```
+
+
+## Forecasting demand through fitted Prophet Model
+```{r}
+dim(prediction_final)
+md <- melt(prediction_final)
+dim(md)
+summary(md)
+colnames(md)<-c("Brand","Scheduled.Delivery.Date","Demand")
+#class(md$Demand)
+md$Demand=expm1(md$Demand)
+head(md)
+```
+
+
+
+
+## Exploring further with Neural Networks
+
+```{r}
+y<-ts(stats$y,frequency=365,start = 2013,end=2017)
+head(y)
+
+plot(y)
+```
+
+## Creating a model to fit through the Neural Network
+```{r}
+#devtools::install_github("bips-hb/neuralnet")
+demand_days <- 90   # Predicting for 90 days demand starting from 01-JAN-2018.
+
+
+nn_trend <- cbind(c(1:(length(y)+demand_days),rep(0,2*demand_days)))
+# Observe that the deterministic trend ends with zeros
+
+
+# Fit a network with no differencing, no univariate lags, and fixed deterministic trend
+fit1 <- mlp(y,difforder=0,lags=0,xreg=nn_trend,xreg.lags=list(0),xreg.keep=TRUE)
+
+```
+
+
+## Printing the Neural Network graph to get input, hidden layer, and outout
+```{r}
+print(fit1)
+plot(fit1)
+```
+
+## Getting the accuracy of Model fit
+```{r}
+plot(forecast(fit1,h=demand_days,xreg=nn_trend))
+
+print("The MSE for Brand & Project Code is")
+print(round(fit1$MSE,4))
+```
+
+## Plotting the data to capture previous days trend
+```{r}
+nn_trend2 <- nn_trend[-(1:demand_days),,drop=FALSE]
+plot(forecast(fit1,h=demand_days,xreg=nn_trend2))
+```
+## Modeling the neural network model to capture previous (lag) days trend
+```{r}
+fit2 <- mlp(y,difforder=0,lags=0,xreg=nn_trend2,xreg.lags=list(0),xreg.keep=TRUE,outplot=1)
+```
+
+
+## Printing the model
+```{r}
+print(fit2)
+plot(forecast(fit2,h=demand_days,xreg=nn_trend2))
+```
+
+## Model Accuracy
+```{r}
+print(round(fit1$MSE,4))  #0.0613
+```
+
